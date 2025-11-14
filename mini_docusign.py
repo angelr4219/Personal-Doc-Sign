@@ -104,42 +104,58 @@ class SignatureCanvas(QWidget):
         return self.image
 
 
-class SignatureDialog(QDialog):
+class SignatureCanvas(QWidget):
     """
-    Dialog that contains a SignatureCanvas and buttons to Clear / Save / Cancel.
+    A simple canvas where the user can draw with the mouse.
+    Internally uses a transparent QImage, so saved PNG has no white background.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, width=500, height=200, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("New Signature")
-        self.canvas = SignatureCanvas(parent=self)
+        self.setFixedSize(width, height)
 
-        self._build_ui()
+        # Transparent image with alpha channel
+        self.image = QImage(width, height, QImage.Format_ARGB32)
+        self.image.fill(Qt.transparent)
 
-    def _build_ui(self):
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("Draw your signature below:", self))
-        layout.addWidget(self.canvas)
+        self.drawing = False
+        self.last_point: Optional[QPoint] = None
 
-        button_row = QHBoxLayout()
-        self.btn_clear = QPushButton("Clear")
-        self.btn_save = QPushButton("Save")
-        self.btn_cancel = QPushButton("Cancel")
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        # Show a white "paper" background in the UI,
+        # but the stored image itself stays transparent.
+        painter.fillRect(self.rect(), Qt.white)
+        painter.drawImage(0, 0, self.image)
 
-        self.btn_clear.clicked.connect(self.canvas.clear)
-        self.btn_save.clicked.connect(self.accept)
-        self.btn_cancel.clicked.connect(self.reject)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drawing = True
+            self.last_point = event.pos()
 
-        button_row.addWidget(self.btn_clear)
-        button_row.addStretch(1)
-        button_row.addWidget(self.btn_cancel)
-        button_row.addWidget(self.btn_save)
+    def mouseMoveEvent(self, event):
+        if self.drawing and self.last_point is not None:
+            painter = QPainter(self.image)
+            pen = QPen(Qt.black, 3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            painter.setPen(pen)
+            painter.drawLine(self.last_point, event.pos())
+            painter.end()
+            self.last_point = event.pos()
+            self.update()
 
-        layout.addLayout(button_row)
-        self.setLayout(layout)
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drawing = False
+
+    def clear(self):
+        # Clear back to fully transparent
+        self.image.fill(Qt.transparent)
+        self.update()
 
     def get_pixmap(self) -> QPixmap:
-        return self.canvas.get_pixmap()
+        # Convert the transparent QImage to QPixmap for saving
+        return QPixmap.fromImage(self.image)
+
 
 
 # ---------- PDF page display widget ----------
